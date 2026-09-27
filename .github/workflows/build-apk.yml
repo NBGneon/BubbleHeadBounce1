@@ -32,6 +32,10 @@ jobs:
           mkdir game
           unzip -q BubbleHeadBounce_Android_Project.zip -d game
 
+      - name: Fix Java type
+        run: |
+          sed -i 's/spawnClock=interval;/spawnClock=(long) interval;/' game/app/src/main/java/com/bubbleheadbounce/game/GameView.java
+
       - name: Build APK
         working-directory: game
         run: gradle assembleDebug
