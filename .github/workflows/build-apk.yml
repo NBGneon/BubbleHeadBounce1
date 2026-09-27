@@ -27,21 +27,76 @@ jobs:
         with:
           gradle-version: '8.9'
 
+      - name: Verify ZIP exists
+        run: |
+          echo "===== ZIP CHECK ====="
+          ls -lh BubbleHeadBounce_Android_Project.zip
+          sha256sum BubbleHeadBounce_Android_Project.zip
+
       - name: Extract project ZIP
         run: |
+          rm -rf game
           mkdir game
           unzip -q BubbleHeadBounce_Android_Project.zip -d game
 
+      - name: Verify NEW game source
+        run: |
+          echo "===== SOURCE VERIFICATION ====="
+
+          GAMEVIEW="game/app/src/main/java/com/bubbleheadbounce/game/GameView.java"
+
+          if [ ! -f "$GAMEVIEW" ]; then
+            echo "ERROR: GameView.java not found!"
+            exit 1
+          fi
+
+          echo "--- GameView found ---"
+
+          echo "--- Checking unlimited-score marker ---"
+          if grep -q "UNLIMITED SCORE" "$GAMEVIEW"; then
+            echo "PASS: Unlimited score source detected."
+          else
+            echo "ERROR: New unlimited-score source NOT detected."
+            echo "The ZIP may contain the old project."
+            exit 1
+          fi
+
+          echo "--- Checking screen structure ---"
+          if grep -q "Screen { MENU, HOWTO, PLAY, PAUSE, GAMEOVER }" "$GAMEVIEW"; then
+            echo "PASS: New screen structure detected."
+          else
+            echo "WARNING: Expected screen structure not found."
+          fi
+
+          echo "--- Checking for old 50-point WIN code ---"
+          if grep -Eq 'score[[:space:]]*(>=|>)[[:space:]]*50|score[[:space:]]*=[[:space:]]*50|Screen\.WIN' "$GAMEVIEW"; then
+            echo "ERROR: OLD 50-POINT WIN CODE DETECTED!"
+            echo "Build stopped so an old APK cannot be produced."
+            exit 1
+          else
+            echo "PASS: No old 50-point WIN condition detected."
+          fi
+
+          echo "===== SOURCE VERIFICATION PASSED ====="
+
       - name: Fix Java type
         run: |
-          sed -i 's/spawnClock=interval;/spawnClock=(long) interval;/' game/app/src/main/java/com/bubbleheadbounce/game/GameView.java
+          sed -i 's/spawnClock=interval;/spawnClock=(long) interval;/' \
+          game/app/src/main/java/com/bubbleheadbounce/game/GameView.java
 
       - name: Build APK
         working-directory: game
-        run: gradle assembleDebug
+        run: |
+          gradle clean assembleDebug
+
+      - name: Verify APK
+        run: |
+          echo "===== APK CREATED ====="
+          ls -lh game/app/build/outputs/apk/debug/app-debug.apk
+          sha256sum game/app/build/outputs/apk/debug/app-debug.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: BubbleHeadBounce-debug-apk
+          name: BubbleHeadBounce-NEW-VERIFIED-APK
           path: game/app/build/outputs/apk/debug/app-debug.apk
